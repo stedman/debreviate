@@ -1,39 +1,78 @@
-const abbr = {
-  "api": "Application Programming Interface",
-  "css": "Cascading Style Sheets",
-  "html": "HyperText Markup Language",
-  "html5": "HyperText Markup Language 5",
-  "json": "JavaScript Object Notation",
-  "js": "JavaScript",
-  "mdn": "Mozilla Developer Network",
-  "xhtml": "Extensible HyperText Markup Language",
-  "xml": "Extensible Markup Language",
-};
+(async () => {
+  // ref: https://medium.com/@otiai10/how-to-use-es6-import-with-chrome-extension-bd5217b9c978
+  const abbrModuleFile = chrome.extension.getURL('abbreviations.mjs');
+  const abbrModule = await import(abbrModuleFile);
+  const abbr = abbrModule.getAll();
 
-const bodyEl = document.body;
-const count = {};
+  const debClassName = 'debreviated';
 
-for (key in abbr) {
-  // regex breakdown:
-  // (?<!<(?:script|abbr)[^>]*) <-- non-capture group: don't look inside script or abbr tags
-  // (>[^<]*)                   <-- capture group 1: get closing HTML tag followed by anything but an opening tag
-  // (\\b${key}\\b)             <-- capture group 2: get target string that has word boundaries
-  const re = new RegExp(`(?<!<(?:script|abbr)[^>]*)(>[^<]*)(\\b${key}\\b)`, 'gi')
+  /**
+   * Generate HTML abbr tag.
+   * @param {string} definition
+   * @param {string} abbreviation
+   */
+  const makeAbbr = (definition, abbreviation) => {
+    return `<abbr title="${definition}">${abbreviation}</abbr>`
+  };
 
-  count[key] = 0;
+  /**
+   * Find abbreviations in current selection and generate abbr tags.
+   */
+  const debreviate = () => {
+    const range = window.getSelection();
+    const selectedEl = range.focusNode.parentElement;
 
-  bodyEl.innerHTML = bodyEl.innerHTML.replaceAll(re, (match, cap1, cap2) => {
-    count[key] += 1;
+    if (selectedEl.classList.contains(debClassName)) return console.log('Already debreviated.');
 
-    return `${cap1}<abbr title="${abbr[key]}">${cap2}</abbr>`;
-  });
+    const result = {};
 
-  if (count[key] < 1) delete count[key];
-}
+    for (key in abbr) {
+      // regex breakdown:
+      // (?<!<(?:script|abbr)[^>]*) <-- non-capture group: don't look inside script or abbr tags
+      // (>[^<]*)                   <-- capture group 1: get closing HTML tag followed by anything but an opening tag
+      // (\\b${key}\\b)             <-- capture group 2: get target string that has word boundaries
+      const reComplex = new RegExp(`(?<!<(?:script|abbr)[^>]*)(>[^<]*)(\\b${key}\\b)`, 'gi');
+      const reBasic = new RegExp(`(\\b${key}\\b)`, 'gi');
 
-const msg = (Object.keys(count).length)
-  ? 'Abbreviations defined (and counted):'
-  : 'No pre-defined abbreviations found.'
+      const output = [];
+      result[key] = 0;
 
-console.info(msg);
-console.table(count);
+      const selectedHtml = selectedEl.innerHTML;
+      const firstBracket = selectedHtml.indexOf('<');
+
+      // Skip the complex regex if there are no brackets.
+      if (firstBracket === -1) {
+        output.push(selectedHtml.replaceAll(reBasic, (match, cap1) => {
+          result[key] += 1;
+          selectedEl.classList.add(debClassName);
+
+          return makeAbbr(abbr[key], cap1);
+        }));
+      } else {
+        // Most selected text will begin without brackets and so will be missed by reComplex.
+        // The following is a hack until a better regex can be written. sigh
+        output.push(selectedHtml.slice(0, firstBracket).replaceAll(reBasic, (match, cap1) => {
+          result[key] += 1;
+          selectedEl.classList.add(debClassName);
+
+          return makeAbbr(abbr[key], cap1);
+        }));
+
+        output.push(selectedHtml.slice(firstBracket).replaceAll(reComplex, (match, cap1 = '', cap2) => {
+          result[key] += 1;
+          selectedEl.classList.add(debClassName);
+
+          return `${cap1}${makeAbbr(abbr[key], cap2)}`;
+        }));
+      }
+
+      if (result[key] < 1) delete result[key];
+
+      selectedEl.innerHTML = output.join('');
+    }
+
+    console.table(result);
+  };
+
+  chrome.runtime.onMessage.addListener(request => debreviate());
+})();

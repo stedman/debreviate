@@ -2,12 +2,24 @@
   "manifest_version": 2,
   "name": "Debreviate",
   "description": "Define abbreviations.",
-  "version": "0.0.1",
+  "version": "0.2.0",
   "icons": {},
+  "background": {
+    "scripts": [
+      "background.js"
+    ]
+  },
   "content_scripts": [{
     "matches": ["*://*.mozilla.org/*"],
+    "css": ["content.css"],
     "js": ["content.js"],
     "run_at": "document_end"
   }],
+  "permissions": [
+    "contextMenus"
+  ],
+  "web_accessible_resources": [
+    "abbreviations.mjs"
+  ],
   "author": "Steve Stedman"
 }
